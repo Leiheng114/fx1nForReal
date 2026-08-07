@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>游戏结束</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#5a5a5a;overflow:hidden;font-family:'Courier New',monospace;color:#fff;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+body{display:flex;align-items:center;justify-content:center}
+
+/* 灰色主画面：左 GIF | 中央文字 | 右 GIF */
+#screen{position:relative;width:min(100vw,calc(100vh*4/3));height:min(100vh,calc(100vw*3/4));background:#5a5a5a;display:flex;align-items:center;justify-content:space-between;padding:clamp(16px,4vh,44px)}
+
+/* 音乐开关：左上角 */
+#music-btn{position:absolute;left:clamp(10px,2vh,22px);top:clamp(10px,2vh,22px);font-family:inherit;background:rgba(0,0,0,.35);color:#fff;border:2px solid #8a8a8a;padding:clamp(6px,1.4vh,14px) clamp(12px,2.6vh,26px);font-size:clamp(12px,2.4vh,26px);letter-spacing:2px;cursor:pointer;transition:.2s;z-index:10}
+#music-btn:hover{background:rgba(0,0,0,.55)}
+#music-btn.off{background:rgba(0,0,0,.5);color:#bbb;border-color:#666}
+
+/* 左侧：两张 GIF（无边框） */
+#gifs-left{display:flex;flex-direction:column;align-items:center;gap:clamp(12px,3vh,30px);flex-shrink:0}
+#gifs-left img{display:block;height:clamp(15vh,20vh,24vh);width:auto;max-width:32vw}
+
+/* 中央：标题 + 小字 + 按钮 */
+#center{display:flex;flex-direction:column;align-items:center;gap:clamp(16px,4vh,44px);text-align:center;flex-shrink:0}
+
+#title{font-size:clamp(28px,7vh,76px);letter-spacing:14px;color:#fff;text-shadow:0 0 12px rgba(0,0,0,.45)}
+
+#praise{font-size:clamp(13px,2.8vh,30px);color:#ddd;letter-spacing:6px;text-shadow:0 0 6px rgba(0,0,0,.4)}
+
+#again-btn{font-family:inherit;background:#3a3a3a;color:#fff;border:3px solid #8a8a8a;padding:clamp(10px,2.2vh,22px) clamp(28px,6vh,64px);font-size:clamp(16px,3.6vh,38px);letter-spacing:6px;cursor:pointer;transition:.2s}
+#again-btn:hover{background:#4a4a4a;border-color:#aaa;transform:scale(1.05)}
+#again-btn:active{transform:scale(.96)}
+
+/* 右侧：一张 GIF */
+#gif-right{display:block;height:clamp(14vh,19vh,24vh);width:auto;max-width:26vw;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div id="screen">
+  <!-- 左上角：音乐开关 -->
+  <button id="music-btn">♪ 音乐：开</button>
+
+  <!-- 左侧：两张 GIF -->
+  <div id="gifs-left">
+    <img src="b560d98eb307941f8c224bf21e08aa7260d67bba0debd2585.gif" alt="gif1">
+    <img src="c1d0e073bdc2c595e570a28c062a53e0744731504ec8e8eed.gif" alt="gif2">
+  </div>
+
+  <!-- 中央：文字区 -->
+  <div id="center">
+    <div id="title">游戏结束！</div>
+    <div id="praise">你太棒了！</div>
+    <button id="again-btn">再来一次？</button>
+  </div>
+
+  <!-- 右侧：一张 GIF -->
+  <img id="gif-right" src="7092EDEE779471455E11649074869174.gif" alt="gif3">
+</div>
+
+<script>
+(function(){
+'use strict';
+/* ===== 音频：We'll Meet Again（低音量保护耳朵，进入页面自动播放） ===== */
+const audio=new Audio(encodeURI("Vera Lynn,Sailors,Soldiers & Airmen of Her Majesty's Forces - We'll Meet Again.mp3"));
+audio.loop=true;
+audio.volume=0.3;                 /* 调低音量，保护玩家耳朵 */
+let playing=false;
+
+const musicBtn=document.getElementById('music-btn');
+
+function tryPlay(){
+  if(playing)return;
+  audio.play().then(function(){
+    playing=true;
+    musicBtn.textContent='♪ 音乐：开';
+    musicBtn.classList.remove('off');
+  }).catch(function(){
+    /* 浏览器可能拦截自动播放：等待第一次用户交互后再补播 */
+    playing=false;
+  });
+}
+function toggleMusic(){
+  if(playing){
+    audio.pause();
+    playing=false;
+    musicBtn.textContent='♪ 音乐：关';
+    musicBtn.classList.add('off');
+  } else {
+    tryPlay();
+  }
+}
+musicBtn.addEventListener('click',toggleMusic);
+
+/* 进入 index11.html 即自动播放 */
+tryPlay();
+/* 若被浏览器拦截，第一次点击页面任意处时补播 */
+document.addEventListener('click',function once(){
+  if(!playing){ tryPlay(); }
+},{once:true});
+
+/* ===== 再来一次 → index.html ===== */
+document.getElementById('again-btn').addEventListener('click',function(){
+  audio.pause();
+  window.location.href='index.html';
+});
+})();
+</script>
+</body>
+</html>

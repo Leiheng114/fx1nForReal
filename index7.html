@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>森林模拟器 · 第五天</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#fff;overflow:hidden;font-family:'Courier New',monospace;color:#cfc;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+body{display:flex;align-items:center;justify-content:center}
+
+#viewport{position:relative;width:min(100vw,calc(100vh*4/3));height:min(100vh,calc(100vw*3/4));background:#000;overflow:hidden}
+canvas#game{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;cursor:crosshair}
+
+#crt{position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);
+  box-shadow:inset 0 0 130px rgba(0,0,0,.35)}
+
+#crosshair{position:absolute;left:50%;top:50%;width:clamp(20px,4.5vh,58px);height:clamp(20px,4.5vh,58px);transform:translate(-50%,-50%);pointer-events:none;z-index:6;opacity:.35}
+#crosshair:before,#crosshair:after{content:'';position:absolute;background:#222;box-shadow:0 0 2px #fff}
+#crosshair:before{left:calc(50% - 1px);top:0;width:2px;height:100%}
+#crosshair:after{left:0;top:calc(50% - 1px);width:100%;height:2px}
+
+#hint{position:absolute;left:50%;top:7%;transform:translateX(-50%);font-size:clamp(12px,2.4vh,30px);color:#14221a;text-align:center;text-shadow:0 0 4px #fff,0 0 8px #fff;white-space:pre-line;z-index:7;display:none;line-height:1.7}
+#msg{position:absolute;left:50%;bottom:15%;transform:translateX(-50%);font-size:clamp(14px,3vh,38px);color:#5a3d12;text-shadow:0 0 6px #fff,0 0 12px #fff;z-index:7;display:none;text-align:center;white-space:nowrap}
+
+#interact{position:absolute;left:50%;bottom:20%;transform:translateX(-50%);z-index:7;display:none;flex-direction:column;align-items:center;gap:clamp(6px,1.4vh,14px)}
+#interact-label{font-size:clamp(13px,2.6vh,32px);color:#123;text-shadow:0 0 5px #fff;white-space:nowrap}
+#progress{width:clamp(220px,38vh,520px);height:clamp(12px,2.4vh,26px);border:2px solid #456;background:rgba(255,255,255,.55)}
+#progress-fill{width:0%;height:100%;background:linear-gradient(90deg,#aef,#4f8)}
+
+#stamina{position:absolute;left:2.5%;bottom:3.5%;z-index:7;width:clamp(120px,22vh,280px)}
+#stamina-label{font-size:clamp(9px,1.5vh,16px);color:#234;text-shadow:0 0 4px #fff;letter-spacing:3px;margin-bottom:4px}
+#stamina-bar{width:100%;height:clamp(8px,1.5vh,16px);border:2px solid #456;background:rgba(255,255,255,.55)}
+#stamina-fill{width:100%;height:100%;background:linear-gradient(90deg,#7f6,#3c6)}
+
+#map-overlay{position:fixed;inset:0;background:rgba(10,20,14,.55);display:none;align-items:center;justify-content:center;z-index:40;flex-direction:column;gap:clamp(4px,1vh,10px)}
+#map{border:3px solid #4a7;background:#cfe0c8;image-rendering:pixelated;image-rendering:crisp-edges;width:min(62vh,62vw);box-shadow:0 0 30px #000}
+.map-t{font-size:clamp(16px,3.4vh,38px);letter-spacing:8px;color:#0a2a12;text-shadow:0 0 6px #fff}
+.map-h{font-size:clamp(10px,1.8vh,18px);color:#244;letter-spacing:2px}
+
+.overlay{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:60;text-align:center}
+#pause .t{font-size:clamp(18px,4vh,42px);letter-spacing:8px;color:#cfe8b0;margin-bottom:clamp(16px,4vh,40px)}
+#pause button,#ending button{font-family:inherit;background:#14251a;color:#bff0b8;border:2px solid #4a7;padding:clamp(8px,1.8vh,18px) clamp(20px,4vh,44px);font-size:clamp(14px,3vh,30px);letter-spacing:4px;cursor:pointer;transition:.2s}
+#pause button:hover,#ending button:hover{background:#1d3523;color:#fff}
+
+#ending{position:fixed;inset:0;background:#000;opacity:0;transition:opacity 4s linear;display:flex;align-items:center;justify-content:center;z-index:80;pointer-events:none}
+#ending .inner{opacity:0;transition:opacity 1.4s ease;transition-delay:3.8s;text-align:center}
+#ending .big{font-size:clamp(18px,4.4vh,50px);letter-spacing:6px;color:#e8f6d0;text-shadow:0 0 14px #486;margin-bottom:clamp(20px,5vh,50px)}
+#ending.show{opacity:1;pointer-events:auto}
+#ending.show .inner{opacity:1}
+
+/* ===== day5 Morning 白色开场（点击直接开始，无淡出） ===== */
+#intro{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:90;text-align:center}
+#intro .day{font-size:clamp(40px,11vh,130px);letter-spacing:14px;color:#2a2a2a;font-family:'Courier New',monospace}
+#click-hint{font-size:clamp(12px,2.4vh,26px);color:#999;letter-spacing:3px;margin-top:clamp(22px,5vh,50px);display:none;animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.12}}
+
+/* ===== 纸条查看 ===== */
+#note-overlay{position:fixed;inset:0;background:rgba(10,8,4,.62);display:none;align-items:center;justify-content:center;z-index:70;flex-direction:column}
+#note-panel{background:#e8e0c8;color:#3a2e1a;padding:clamp(14px,3vh,30px) clamp(18px,4vh,44px);max-width:min(90vw,780px);border:4px solid #8a7350;box-shadow:0 0 40px #000;text-align:left;font-family:'Courier New',monospace;white-space:pre-line;line-height:1.7;font-size:clamp(11px,2.1vh,19px);max-height:80vh;overflow:auto}
+#note-title{text-align:center;font-size:clamp(15px,3.2vh,26px);font-weight:bold;letter-spacing:3px;margin-bottom:clamp(10px,2vh,18px);color:#5a4020}
+#note-close{margin-top:clamp(12px,2.4vh,22px);font-family:inherit;background:#5a4020;color:#f0e6cc;border:2px solid #3a2a12;padding:clamp(6px,1.2vh,12px) clamp(16px,3vh,34px);font-size:clamp(12px,2.4vh,22px);cursor:pointer;letter-spacing:3px}
+#note-close:hover{background:#7a5a30}
+
+/* ===== 电脑：测手速游戏 + Rickroll ===== */
+#speed-overlay{position:fixed;inset:0;background:rgba(0,0,0,.94);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:95;text-align:center}
+#monitor{background:#121214;border:clamp(10px,2.2vh,24px) solid #2a2a2e;border-radius:10px;padding:clamp(14px,3vh,30px);box-shadow:0 0 60px #000;display:flex;flex-direction:column;align-items:center;gap:clamp(10px,2vh,20px)}
+#speed-title{font-size:clamp(16px,3.4vh,34px);color:#4fc3f7;letter-spacing:4px;font-family:'Courier New',monospace}
+#speed-target{font-size:clamp(13px,2.6vh,26px);color:#aaa;letter-spacing:2px}
+#speed-btn{width:clamp(150px,26vh,280px);height:clamp(150px,26vh,280px);border-radius:50%;border:5px solid #4fc3f7;background:#1a3a5a;color:#fff;font-size:clamp(26px,6vh,60px);font-weight:bold;font-family:'Courier New',monospace;cursor:pointer;transition:transform .06s;box-shadow:0 0 30px rgba(79,195,247,.35)}
+#speed-btn:hover{background:#1f4a72}
+#speed-btn:active{transform:scale(.92)}
+#speed-stats{font-size:clamp(12px,2.4vh,24px);color:#cfc;letter-spacing:2px}
+#speed-clear{font-size:clamp(13px,2.6vh,26px);color:#2ecc71;letter-spacing:2px;display:none}
+#speed-next{font-family:inherit;background:#4fc3f7;color:#121214;border:none;padding:clamp(8px,1.8vh,16px) clamp(22px,4vh,44px);font-size:clamp(14px,2.8vh,26px);font-weight:bold;letter-spacing:3px;cursor:pointer;border-radius:25px;display:none}
+#speed-next:hover{background:#81d4fa;transform:scale(1.04)}
+#speed-esc-hint{font-size:clamp(10px,1.8vh,18px);color:#666;letter-spacing:3px;margin-top:clamp(4px,1vh,10px)}
+#rickroll{width:min(64vh,92vw);height:auto;display:none;background:#000}
+#rickroll-hint{font-size:clamp(10px,1.8vh,18px);color:#666;letter-spacing:3px;margin-top:clamp(6px,1.2vh,12px);display:none}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <canvas id="game" width="320" height="240"></canvas>
+  <div id="crt"></div>
+  <div id="crosshair"></div>
+  <div id="hint"></div>
+  <div id="msg"></div>
+  <div id="interact">
+    <div id="interact-label"></div>
+    <div id="progress"><div id="progress-fill"></div></div>
+  </div>
+  <div id="stamina">
+    <div id="stamina-label">体 力</div>
+    <div id="stamina-bar"><div id="stamina-fill"></div></div>
+  </div>
+</div>
+
+<div id="map-overlay">
+  <div class="map-t">地 图</div>
+  <canvas id="map" width="480" height="480"></canvas>
+  <div class="map-h">按 Tab 关闭地图</div>
+</div>
+
+<div class="overlay hidden" id="pause">
+  <div class="t">游 戏 暂 停</div>
+  <button id="resume-btn">点击继续</button>
+</div>
+
+<div id="ending">
+  <div class="inner">
+    <div class="big">你成功维护了四个发电机！</div>
+    <button id="nextday-btn">夜晚</button>
+  </div>
+</div>
+
+<!-- day5 Morning 开场 -->
+<div id="intro">
+  <div class="day">day5 Morning</div>
+  <div id="click-hint">点击任意处继续</div>
+</div>
+
+<!-- 纸条（迷你大战MC 3） -->
+<div id="note-overlay">
+  <div id="note-panel">
+    <div id="note-title">迷你大战MC 3</div>
+第三章:战争中段
+
+自上次迷你狗逃回迷你总部后，过了三个月。
+
+迷你自从失败了一次后，便学聪明了。
+
+并且，迷你一方有着熊孩子，队长汤姆，西部警长乔伊，荒野猎人雪诺等大将。
+
+虽然比不上MC大军的Him等人，但还是让MC大军受到了许多损失。
+
+除此之外，在媒体上，迷你世界还大肆宣传：
+
+其实迷你世界才是正版
+
+我的世界才是盗版
+
+早在侏罗纪时期
+
+就有一个老头把代码弄到U盘上
+
+过了很久，到了战国时期
+
+一个秦国的老头子
+
+发现了这个U盘
+
+里面写着迷你世界的代码
+
+后来被几个美国人抢走了
+
+被偷走代码的秦王非常愤怒
+
+所以刻在了长城上
+
+战国时期过后
+
+偷走战国时期U盘的几个美国人
+
+在2016创造了我的世界
+
+战国时期U盘原主人的孙子
+
+发现了仅存的代码创造了
+
+迷你世界
+
+所以你们别喷迷你了！
+
+而这一行为，让MC大军的notch等人十分愤怒！
+
+notch，愤怒了！
+
+notch：
+
+今天，我们为被害的MC玩家们哀悼
+
+明天，我们就要让凶手付出代价
+
+MC不会允许迷你对MC的入侵
+
+做最优质的战士！
+
+共同的损失，让我们更加
+
+团！结！一！致！
+
+迷你要为可耻刺杀我们的MC玩家
+
+做！出！回！答！
+
+未完待续
+
+——————————————————
+
+反MC=反mojang
+反mojang=反微软
+反微软=反比尔盖茨
+反比尔盖茨=反计算机
+反计算机=反人类进步
+反人类进步=反人类
+所以，反MC=反人类
+长按复制
+  </div>
+  <button id="note-close">关闭</button>
+</div>
+
+<!-- 电脑：测手速游戏（3关） + Rickroll（音量已调低） -->
+<div id="speed-overlay">
+  <div id="monitor">
+    <div id="speed-title">测手速 · 第 1 / 3 关</div>
+    <div id="speed-target">疯狂点击按钮 8 次！</div>
+    <button id="speed-btn">GO!</button>
+    <div id="speed-stats">已点击 0 / 8 · 用时 0.0 秒</div>
+    <div id="speed-clear">第 1 关完成！用时 0.0 秒</div>
+    <button id="speed-next">下一关</button>
+    <div id="speed-esc-hint">按 E 退出电脑</div>
+    <video id="rickroll" src="rickroll.mp4" preload="auto" volume="0.3"></video>
+    <div id="rickroll-hint">—— 按 E 退出电脑 ——</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+/* ============ 常量 ============ */
+const MAP=200;
+const GEN_POS=[[-170,-170],[170,-170],[-170,170],[170,170]];
+const WALK_SPEED=16, SPRINT_MULT=1.8;
+const HOME_CIRCLE=new THREE.Vector3(0,0,13);
+const HOME_RADIUS=8;
+/* 电脑屋（无门，可直入）与内部交互点 */
+const HOUSE_POS=new THREE.Vector3(-90,0,95);
+const COMPUTER_POS=new THREE.Vector3(-92,0,96);
+/* 纸条：放在屋子的空旷处（屋中央地板上），远离电脑 */
+const NOTE_POS=new THREE.Vector3(-90,0,100.5);
+/* 损坏的收音机：仍在第四天清晨位置，已损坏（无声音） */
+const RADIO_POS=new THREE.Vector3(140,0,130);
+
+/* ============ 渲染器（320×240 白天） ============ */
+const canvas=document.getElementById('game');
+const renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:false});
+renderer.setSize(320,240,false);
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x8fb0c4);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.BasicShadowMap;
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xa8c4d4,30,200);
+
+const camera=new THREE.PerspectiveCamera(65,4/3,0.1,400);
+camera.rotation.order='YXZ';
+
+/* ============ 白天光照 ============ */
+scene.add(new THREE.AmbientLight(0x9fb0c0,1.15));
+const sun=new THREE.DirectionalLight(0xfff2d8,1.05);
+sun.position.set(70,100,40);
+sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left=-130; sun.shadow.camera.right=130;
+sun.shadow.camera.top=130; sun.shadow.camera.bottom=-130;
+sun.shadow.camera.near=1; sun.shadow.camera.far=280;
+scene.add(sun);
+
+/* ============ 地面 + 边界 ============ */
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(MAP*2+160,MAP*2+160),new THREE.MeshLambertMaterial({color:0x52703f}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+const hedgeMat=new THREE.MeshLambertMaterial({color:0x3a5a30,flatShading:true});
+[[0,1],[0,-1],[1,0],[-1,0]].forEach(function(e){
+  const sx=e[0],sz=e[1];
+  const h=new THREE.Mesh(new THREE.BoxGeometry(sx?2:MAP*2,3.2,sz?2:MAP*2),hedgeMat);
+  h.position.set(sx*(MAP-1),1.6,sz*(MAP-1));
+  h.castShadow=true; h.receiveShadow=true; scene.add(h);
+});
+
+/* ============ 树木 ============ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const rng=mulberry32(20240517);
+const treePos=[];
+const N=520;
+for(let i=0;i<N;i++){
+  let ok=false,x=0,z=0;
+  for(let tries=0;tries<30&&!ok;tries++){
+    x=(rng()*2-1)*(MAP-10); z=(rng()*2-1)*(MAP-10);
+    if(x*x+z*z<34*34) continue;
+    ok=true;
+    for(const g of GEN_POS){ const dx=x-g[0],dz=z-g[1]; if(dx*dx+dz*dz<22*22){ok=false;break;} }
+    if(ok){ const rdx=x-RADIO_POS.x,rdz=z-RADIO_POS.z; if(rdx*rdx+rdz*rdz<18*18) ok=false; }
+    if(ok){ const hx=x-HOUSE_POS.x,hz=z-HOUSE_POS.z; if(hx*hx+hz*hz<20*20) ok=false; }
+    if(ok) treePos.push([x,z]);
+  }
+}
+const trunkGeo=new THREE.CylinderGeometry(0.35,0.6,3,5);
+const folGeo=new THREE.ConeGeometry(1.7,3.6,6);
+const trunkMat=new THREE.MeshLambertMaterial({color:0x5a4028,flatShading:true});
+const folMat=new THREE.MeshLambertMaterial({color:0x3a6a34,flatShading:true});
+const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,treePos.length);
+const fols=new THREE.InstancedMesh(folGeo,folMat,treePos.length);
+const m=new THREE.Matrix4(),q=new THREE.Quaternion(),eu=new THREE.Euler(),v=new THREE.Vector3(),s=new THREE.Vector3();
+for(let i=0;i<treePos.length;i++){
+  const x=treePos[i][0],z=treePos[i][1];
+  const sc=0.75+rng()*1.1, ry=rng()*Math.PI*2;
+  eu.set(0,ry,0); q.setFromEuler(eu);
+  v.set(x,1.5*sc,z); s.set(sc,sc,sc); m.compose(v,q,s); trunks.setMatrixAt(i,m);
+  v.set(x,3+1.8*sc,z); s.set(sc*0.9,sc,sc*0.9); m.compose(v,q,s); fols.setMatrixAt(i,m);
+}
+trunks.castShadow=fols.castShadow=true;
+scene.add(trunks); scene.add(fols);
+
+/* ============ 发电机 ============ */
+const gens=[];
+const gBody=new THREE.MeshLambertMaterial({color:0x55595e,flatShading:true});
+const gDark=new THREE.MeshLambertMaterial({color:0x2a2e31,flatShading:true});
+GEN_POS.forEach(function(gp){
+  const g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.BoxGeometry(5,0.7,3.6),gDark); base.position.y=0.35; base.receiveShadow=true; g.add(base);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(4.2,3,2.6),gBody); body.position.y=2.2; body.castShadow=true; g.add(body);
+  const cap=new THREE.Mesh(new THREE.BoxGeometry(3,0.5,2),gDark); cap.position.y=3.95; g.add(cap);
+  const lampMat=new THREE.MeshBasicMaterial({color:0xff2222});
+  const lamp=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.7),lampMat); lamp.position.y=4.7; g.add(lamp);
+  const light=new THREE.PointLight(0xff2222,1.6,40,1); light.position.y=4.5; g.add(light);
+  g.position.set(gp[0],0,gp[1]); scene.add(g);
+  gens.push({group:g,lampMat:lampMat,light:light,x:gp[0],z:gp[1],maintained:false});
+});
+
+/* ============ 家 ============ */
+(function makeHome(){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(14,8,12),new THREE.MeshLambertMaterial({color:0x9a7a52,flatShading:true}));
+  body.position.y=4; body.castShadow=true; g.add(body);
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(12,5,4),new THREE.MeshLambertMaterial({color:0x7a5a38,flatShading:true}));
+  roof.position.y=10.5; roof.rotation.y=Math.PI/4; roof.castShadow=true; g.add(roof);
+  const door=new THREE.Mesh(new THREE.PlaneGeometry(2.4,4.4),new THREE.MeshBasicMaterial({color:0x2a1a0c}));
+  door.position.set(0,2.2,6.03); g.add(door);
+  const win=new THREE.Mesh(new THREE.PlaneGeometry(3,2),new THREE.MeshBasicMaterial({color:0xffe0a0}));
+  win.position.set(3.6,4.4,6.03); g.add(win);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(5.5,8,36),new THREE.MeshBasicMaterial({color:0xffc87a,transparent:true,opacity:0.5,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2; ring.position.set(0,0.06,13); g.add(ring);
+  const inner=new THREE.Mesh(new THREE.CircleGeometry(5.5,36),new THREE.MeshBasicMaterial({color:0xffe0a0,transparent:true,opacity:0.16}));
+  inner.rotation.x=-Math.PI/2; inner.position.set(0,0.05,13); g.add(inner);
+  scene.add(g);
+})();
+
+/* ============ 电脑屋（无门，可直接进入） ============ */
+(function makeComputerHouse(){
+  const g=new THREE.Group();
+  const wallMat=new THREE.MeshLambertMaterial({color:0x8a6a44,flatShading:true});
+  const roofMat=new THREE.MeshLambertMaterial({color:0x6a4a2c,flatShading:true});
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(16,14),new THREE.MeshLambertMaterial({color:0x6a5236,side:THREE.DoubleSide}));
+  floor.rotation.x=-Math.PI/2; floor.position.y=0.02; g.add(floor);
+  const wb=new THREE.Mesh(new THREE.BoxGeometry(16,5,0.4),wallMat); wb.position.set(0,2.5,-7); g.add(wb);
+  const wl=new THREE.Mesh(new THREE.BoxGeometry(0.4,5,14),wallMat); wl.position.set(-8,2.5,0); g.add(wl);
+  const wr=new THREE.Mesh(new THREE.BoxGeometry(0.4,5,14),wallMat); wr.position.set(8,2.5,0); g.add(wr);
+  const wfL=new THREE.Mesh(new THREE.BoxGeometry(5,5,0.4),wallMat); wfL.position.set(-5.5,2.5,7); g.add(wfL);
+  const wfR=new THREE.Mesh(new THREE.BoxGeometry(5,5,0.4),wallMat); wfR.position.set(5.5,2.5,7); g.add(wfR);
+  const wfT=new THREE.Mesh(new THREE.BoxGeometry(10,2.2,0.4),wallMat); wfT.position.set(0,4,7); g.add(wfT);
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(13,3,4),roofMat); roof.position.y=6.5; roof.rotation.y=Math.PI/4; g.add(roof);
+  const desk=new THREE.Mesh(new THREE.BoxGeometry(5,0.9,2.4),new THREE.MeshLambertMaterial({color:0x5a4028})); desk.position.set(-2,0.45,0); desk.receiveShadow=true; g.add(desk);
+  const monitor=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.4,0.15),new THREE.MeshLambertMaterial({color:0x141414})); monitor.position.set(-2,1.55,1.0); g.add(monitor);
+  const screen=new THREE.Mesh(new THREE.PlaneGeometry(1.9,1.1),new THREE.MeshBasicMaterial({color:0x1a3f6a})); screen.position.set(-2,1.55,1.09); g.add(screen);
+  const tower=new THREE.Mesh(new THREE.BoxGeometry(0.6,1.6,0.6),new THREE.MeshLambertMaterial({color:0x222222})); tower.position.set(0.8,0.8,-1.6); g.add(tower);
+  const chairBack=new THREE.Mesh(new THREE.BoxGeometry(1.4,2,0.2),new THREE.MeshLambertMaterial({color:0x3a3a3a})); chairBack.position.set(-2,1.2,-1.8); g.add(chairBack);
+  const chairSeat=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.4,1.4),new THREE.MeshLambertMaterial({color:0x3a3a3a})); chairSeat.position.set(-2,0.55,-1.2); g.add(chairSeat);
+  g.position.set(HOUSE_POS.x,0,HOUSE_POS.z);
+  scene.add(g);
+})();
+
+/* 纸条：平放在屋子空旷处的地板上（远离电脑） */
+(function makeFloorNote(){
+  const np=new THREE.Mesh(new THREE.PlaneGeometry(0.9,1.2),new THREE.MeshBasicMaterial({color:0xe8e0c8,side:THREE.DoubleSide}));
+  np.rotation.x=-Math.PI/2;
+  np.position.set(NOTE_POS.x,0.03,NOTE_POS.z);
+  scene.add(np);
+})();
+
+/* ============ 损坏的收音机（无声音） ============ */
+(function makeBrokenRadio(){
+  const g=new THREE.Group();
+  const box=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.85,0.65),new THREE.MeshLambertMaterial({color:0x2e2e2e,flatShading:true}));
+  box.position.y=0.42; box.rotation.z=0.35; box.castShadow=true; g.add(box);
+  const ant=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.7,6),new THREE.MeshLambertMaterial({color:0x555555}));
+  ant.position.set(0.4,1.1,0); ant.rotation.z=-0.5; g.add(ant);
+  const crack=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.7,0.1),new THREE.MeshLambertMaterial({color:0x111111}));
+  crack.position.set(0.1,0.45,0.33); g.add(crack);
+  const hole=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,0.1),new THREE.MeshLambertMaterial({color:0x0a0a0a}));
+  hole.position.set(-0.4,0.6,0.33); g.add(hole);
+  g.position.copy(RADIO_POS);
+  scene.add(g);
+})();
+
+/* ============ 玩家 / 状态 ============ */
+const player=new THREE.Vector3(0,0,30);
+let yaw=0,pitch=0,moving=false,bobT=0;
+const keys={};
+let locked=false,mapOpen=false;
+let state='intro';                 /* intro → playing → note / speed → ending */
+let progress=0,nearGen=-1,endingTriggered=false;
+let stamina=100,exhaustedTimer=0,sprinting=false;
+const MAX_STA=100;
+
+/* ============ 输入 ============ */
+document.addEventListener('keydown',function(e){
+  if(state==='note'&&(e.code==='KeyE'||e.code==='Escape')){
+    e.preventDefault(); closeNote(); return;
+  }
+  if(state==='speed'&&e.code==='KeyE'){
+    e.preventDefault(); exitSpeed(); return;
+  }
+  if(e.code==='Tab'){
+    e.preventDefault();
+    if(state==='playing'){ mapOpen=!mapOpen; document.getElementById('map-overlay').style.display=mapOpen?'flex':'none'; }
+    return;
+  }
+  keys[e.code]=true;
+});
+document.addEventListener('keyup',function(e){ keys[e.code]=false; });
+document.addEventListener('mousemove',function(e){
+  if(!locked||state!=='playing')return;
+  yaw-=e.movementX*0.0023;
+  pitch-=e.movementY*0.0023;
+  pitch=Math.max(-1.45,Math.min(1.45,pitch));
+});
+document.addEventListener('pointerlockchange',function(){
+  locked=!!(document.pointerLockElement===document.body||document.pointerLockElement===canvas);
+  if(!locked){ if(state==='playing') document.getElementById('pause').classList.remove('hidden'); }
+  else document.getElementById('pause').classList.add('hidden');
+});
+canvas.addEventListener('click',function(){
+  if(state==='playing'&&!locked){ try{document.body.requestPointerLock();}catch(err){} }
+});
+document.addEventListener('contextmenu',function(e){e.preventDefault();});
+window.addEventListener('blur',function(){ for(const k in keys) keys[k]=false; });
+
+/* ============ 音频 ============ */
+let AC=null,master=null,daytimeAudio=null;
+function initAudio(){
+  if(AC)return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(err){ return; }
+  master=AC.createGain(); master.gain.value=0.7; master.connect(AC.destination);
+}
+function noiseBuffer(sec){
+  const len=Math.floor(AC.sampleRate*sec),buf=AC.createBuffer(1,len,AC.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  return buf;
+}
+function playMaintainSound(){
+  if(!AC)return;
+  const t=AC.currentTime;
+  const o=AC.createOscillator(); o.type='square';
+  o.frequency.setValueAtTime(180,t); o.frequency.exponentialRampToValueAtTime(70,t+0.12);
+  const g=AC.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.35,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.15);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+0.16);
+  const o2=AC.createOscillator(); o2.type='sine';
+  o2.frequency.setValueAtTime(300,t+0.15); o2.frequency.exponentialRampToValueAtTime(540,t+0.5);
+  const g2=AC.createGain(); g2.gain.setValueAtTime(0.0001,t+0.15); g2.gain.exponentialRampToValueAtTime(0.25,t+0.25); g2.gain.exponentialRampToValueAtTime(0.0001,t+0.6);
+  o2.connect(g2); g2.connect(master); o2.start(t+0.15); o2.stop(t+0.65);
+}
+function stopAllAudio(){
+  if(daytimeAudio){try{daytimeAudio.pause();}catch(e){} daytimeAudio=null;}
+  if(AC){ try{ AC.suspend(); }catch(e){} }
+}
+
+/* ============ HUD ============ */
+const hintEl=document.getElementById('hint'),msgEl=document.getElementById('msg');
+const interactEl=document.getElementById('interact'),interactLabel=document.getElementById('interact-label');
+const progressFill=document.getElementById('progress-fill');
+const staminaFill=document.getElementById('stamina-fill');
+const mapOverlay=document.getElementById('map-overlay'),mapCanvas=document.getElementById('map'),mapCtx=mapCanvas.getContext('2d');
+const noteOverlay=document.getElementById('note-overlay');
+let hintTimer=null,msgTimer=null;
+function showHint(t){ hintEl.textContent=t; hintEl.style.display='block'; }
+function hideHintSoon(ms){ if(hintTimer)clearTimeout(hintTimer); hintTimer=setTimeout(function(){hintEl.style.display='none';},ms); }
+function showMsg(t,persist){ msgEl.textContent=t; msgEl.style.display='block'; if(!persist){ if(msgTimer)clearTimeout(msgTimer); msgTimer=setTimeout(function(){msgEl.style.display='none';},2600);} }
+function hideMsg(){ msgEl.style.display='none'; }
+
+/* ============ 纸条打开/关闭 ============ */
+function openNote(){
+  if(state!=='playing')return;
+  if(mapOpen){ mapOpen=false; mapOverlay.style.display='none'; }
+  state='note';
+  noteOverlay.style.display='flex';
+  if(document.pointerLockElement){ try{document.exitPointerLock();}catch(e){} }
+}
+function closeNote(){
+  state='playing';
+  noteOverlay.style.display='none';
+  try{ document.body.requestPointerLock(); }catch(e){}
+}
+document.getElementById('note-close').addEventListener('click',closeNote);
+
+/* ================================================================
+   电脑：测手速游戏（3关）+ Rickroll（音量已调低）
+   · 每关目标点击次数递增：8 / 16 / 30
+   · 点击大按钮累计次数，记录用时，显示点击速度
+   · 通过第三关后播放 rickroll.mp4（正常尺寸、低音量保护耳朵）
+   ================================================================ */
+const speedOverlay=document.getElementById('speed-overlay');
+const speedTitle=document.getElementById('speed-title');
+const speedTarget=document.getElementById('speed-target');
+const speedBtn=document.getElementById('speed-btn');
+const speedStats=document.getElementById('speed-stats');
+const speedClear=document.getElementById('speed-clear');
+const speedNext=document.getElementById('speed-next');
+const rickrollVideo=document.getElementById('rickroll');
+const rickrollHint=document.getElementById('rickroll-hint');
+
+const SPEED_GOALS=[8,16,30];          /* 三关目标点击次数 */
+let speedLevel=1;                      /* 1..3 */
+let speedClicks=0;
+let speedStartTime=0;
+let speedElapsed=0;
+let speedState='idle';                 /* idle / playing / cleared */
+let videoPlaying=false;
+
+function speedShowStage(){
+  speedBtn.style.display='inline-block';
+  speedClear.style.display='none';
+  speedNext.style.display='none';
+  rickrollVideo.style.display='none';
+  rickrollHint.style.display='none';
+  rickrollVideo.pause();
+  videoPlaying=false;
+  speedTitle.textContent='测手速 · 第 '+speedLevel+' / 3 关';
+  speedTarget.textContent='疯狂点击按钮 '+SPEED_GOALS[speedLevel-1]+' 次！';
+  speedStats.textContent='已点击 0 / '+SPEED_GOALS[speedLevel-1]+' · 用时 0.0 秒';
+  speedState='playing';
+  speedClicks=0;
+  speedElapsed=0;
+  speedStartTime=performance.now();
+}
+function initSpeedLevel(lvl){
+  speedLevel=lvl;
+  speedShowStage();
+}
+function speedHandleClick(){
+  if(speedState!=='playing')return;
+  speedClicks++;
+  speedElapsed=(performance.now()-speedStartTime)/1000;
+  const goal=SPEED_GOALS[speedLevel-1];
+  speedStats.textContent='已点击 '+speedClicks+' / '+goal+' · 用时 '+speedElapsed.toFixed(1)+' 秒';
+  if(speedClicks>=goal){
+    speedState='cleared';
+    speedElapsed=(performance.now()-speedStartTime)/1000;
+    const cps=speedClicks/speedElapsed;
+    speedClear.textContent='第 '+speedLevel+' 关完成！用时 '+speedElapsed.toFixed(1)+' 秒（'+cps.toFixed(1)+' 次/秒）';
+    speedClear.style.display='block';
+    if(speedLevel<3){
+      speedNext.style.display='inline-block';
+      speedNext.textContent='下一关';
+    } else {
+      playRickroll();      /* 通过第三关 → 直接 Rickroll */
+    }
+  }
+}
+speedBtn.addEventListener('click',speedHandleClick);
+speedNext.addEventListener('click',function(){
+  initSpeedLevel(speedLevel+1);
+});
+function playRickroll(){
+  videoPlaying=true;
+  speedBtn.style.display='none';
+  speedClear.style.display='none';
+  speedNext.style.display='none';
+  speedTarget.style.display='none';
+  speedStats.style.display='none';
+  speedTitle.textContent='';
+  rickrollVideo.style.display='block';
+  rickrollHint.style.display='block';
+  rickrollVideo.currentTime=0;
+  rickrollVideo.volume=0.3;            /* 调低音量，保护玩家耳朵 */
+  rickrollVideo.play().catch(function(){});
+}
+function openSpeed(){
+  if(state!=='playing')return;
+  if(mapOpen){ mapOpen=false; mapOverlay.style.display='none'; }
+  if(document.pointerLockElement){ try{document.exitPointerLock();}catch(e){} }
+  state='speed';
+  speedOverlay.style.display='flex';
+  if(daytimeAudio){ try{daytimeAudio.pause();}catch(e){} }   /* 电脑屏幕时不播放daytime.mp3 */
+  videoPlaying=false;
+  rickrollVideo.pause(); rickrollVideo.style.display='none'; rickrollHint.style.display='none';
+  speedTarget.style.display='block';
+  speedStats.style.display='block';
+  initSpeedLevel(1);
+}
+function exitSpeed(){
+  state='playing';
+  speedOverlay.style.display='none';
+  rickrollVideo.pause(); rickrollVideo.style.display='none';
+  videoPlaying=false;
+  if(daytimeAudio){ try{daytimeAudio.play().catch(function(){});}catch(e){} }
+  try{ document.body.requestPointerLock(); }catch(e){}
+}
+
+/* ============ 地图（不标记收音机、纸条、电脑屋） ============ */
+function drawMap(){
+  const W=480,P=44,S=W-P*2,ctx=mapCtx;
+  ctx.fillStyle='#cfe0c8'; ctx.fillRect(0,0,W,W);
+  function px(x){return P+(x+MAP)/(2*MAP)*S;}
+  function py(z){return P+(z+MAP)/(2*MAP)*S;}
+  ctx.strokeStyle='rgba(40,90,50,0.18)'; ctx.lineWidth=1;
+  for(let i=-200;i<=200;i+=50){
+    ctx.beginPath();ctx.moveTo(px(i),P);ctx.lineTo(px(i),P+S);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(P,py(i));ctx.lineTo(P+S,py(i));ctx.stroke();
+  }
+  ctx.strokeStyle='#3a7'; ctx.lineWidth=2; ctx.strokeRect(P,P,S,S);
+  gens.forEach(function(g){
+    const x=px(g.x),y=py(g.z);
+    if(g.maintained){
+      ctx.fillStyle='rgba(40,190,80,0.20)'; ctx.beginPath();ctx.arc(x,y,13,0,7);ctx.fill();
+      ctx.strokeStyle='#2c8'; ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(x-7,y-7);ctx.lineTo(x+7,y+7);ctx.moveTo(x+7,y-7);ctx.lineTo(x-7,y+7);ctx.stroke();
+    }else{
+      ctx.fillStyle='rgba(220,60,60,0.20)'; ctx.beginPath();ctx.arc(x,y,13,0,7);ctx.fill();
+      ctx.strokeStyle='#c44'; ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(x-7,y-7);ctx.lineTo(x+7,y+7);ctx.moveTo(x+7,y-7);ctx.lineTo(x-7,y+7);ctx.stroke();
+    }
+  });
+  const hx=px(0),hy=py(0);
+  ctx.fillStyle='#c47a10'; ctx.strokeStyle='#c47a10'; ctx.lineWidth=2;
+  ctx.fillRect(hx-8,hy-2,16,12);
+  ctx.beginPath();ctx.moveTo(hx-9,hy-1);ctx.lineTo(hx,hy-12);ctx.lineTo(hx+9,hy-1);ctx.closePath();ctx.fill();
+  ctx.font='12px monospace'; ctx.fillStyle='#5a4020'; ctx.fillText('家',hx-6,hy+24);
+  const pfx=-Math.sin(yaw),pfz=-Math.cos(yaw);
+  const pxx=px(player.x),pyy=py(player.z);
+  ctx.fillStyle='#2a6fc0'; ctx.beginPath();ctx.arc(pxx,pyy,5,0,7);ctx.fill();
+  ctx.strokeStyle='#2a6fc0'; ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(pxx,pyy);ctx.lineTo(pxx+pfx*16,pyy+pfz*16);ctx.stroke();
+  ctx.font='12px monospace'; ctx.fillStyle='#145'; ctx.fillText('你',pxx+8,pyy-6);
+  ctx.fillStyle='rgba(20,60,30,0.5)'; ctx.font='14px monospace'; ctx.fillText('北',P+S/2-7,P+14);
+  ctx.font='11px monospace'; ctx.fillStyle='#466';
+  ctx.fillText('红 X：发电机（待维护）　绿 X：发电机（已维护）　家：小屋',P,W-16);
+}
+
+/* ============ 核心逻辑 ============ */
+const houseWalls=[
+  {minX:-98,maxX:-82,minZ:87.8,maxZ:88.2},
+  {minX:-98.2,maxX:-97.8,minZ:88,maxZ:102},
+  {minX:-82.2,maxX:-81.8,minZ:88,maxZ:102},
+  {minX:-98,maxX:-93,minZ:101.8,maxZ:102.2},
+  {minX:-87,maxX:-82,minZ:101.8,maxZ:102.2},
+  {minX:-94.5,maxX:-89.5,minZ:93.8,maxZ:96.2}
+];
+function collide(){
+  const b=MAP-1.5;
+  if(player.x<-b)player.x=-b; if(player.x>b)player.x=b;
+  if(player.z<-b)player.z=-b; if(player.z>b)player.z=b;
+  for(let i=0;i<treePos.length;i++){
+    const dx=player.x-treePos[i][0],dz=player.z-treePos[i][1],d2=dx*dx+dz*dz;
+    if(d2<6.0){ const d=Math.sqrt(d2)||0.001,ov=2.45-d; player.x+=dx/d*ov; player.z+=dz/d*ov; }
+  }
+  for(const g of gens){
+    const dx=player.x-g.x,dz=player.z-g.z,d2=dx*dx+dz*dz;
+    if(d2<14.4){ const d=Math.sqrt(d2)||0.001,ov=3.8-d; player.x+=dx/d*ov; player.z+=dz/d*ov; }
+  }
+  const rdx=player.x-RADIO_POS.x,rdz=player.z-RADIO_POS.z,rd2=rdx*rdx+rdz*rdz;
+  if(rd2<2.56){ const d=Math.sqrt(rd2)||0.001,ov=1.6-d; player.x+=rdx/d*ov; player.z+=rdz/d*ov; }
+  for(const w of houseWalls){
+    if(player.x>w.minX-0.6&&player.x<w.maxX+0.6&&player.z>w.minZ-0.6&&player.z<w.maxZ+0.6){
+      const dl=player.x-(w.minX-0.6),dr=(w.maxX+0.6)-player.x,db=player.z-(w.minZ-0.6),df=(w.maxZ+0.6)-player.z;
+      const mm=Math.min(dl,dr,db,df);
+      if(mm===dl)player.x=w.minX-0.6; else if(mm===dr)player.x=w.maxX+0.6;
+      else if(mm===db)player.z=w.minZ-0.6; else player.z=w.maxZ+0.6;
+    }
+  }
+  if(player.x>-7.5&&player.x<7.5&&player.z>-6.5&&player.z<6.5){
+    const dl=player.x+7.5,dr=7.5-player.x,db=player.z+6.5,df=6.5-player.z,mm=Math.min(dl,dr,db,df);
+    if(mm===dl)player.x=-7.5; else if(mm===dr)player.x=7.5; else if(mm===db)player.z=-6.5; else player.z=6.5;
+  }
+}
+function updatePlayer(dt){
+  if(mapOpen){ moving=false; return; }
+  const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
+  const rx=Math.cos(yaw),rz=-Math.sin(yaw);
+  let mx=0,mz=0;
+  if(keys['KeyW']){mx+=fx;mz+=fz;}
+  if(keys['KeyS']){mx-=fx;mz-=fz;}
+  if(keys['KeyD']){mx+=rx;mz+=rz;}
+  if(keys['KeyA']){mx-=rx;mz-=rz;}
+  moving=(mx!==0||mz!==0);
+  const wantSprint=!!(keys['ShiftLeft']||keys['ShiftRight']);
+  sprinting=wantSprint&&stamina>0&&moving;
+  if(sprinting){ stamina-=26*dt; if(stamina<=0){stamina=0; exhaustedTimer=2.6;} }
+  else if(stamina<MAX_STA){
+    if(exhaustedTimer>0) exhaustedTimer-=dt;
+    else stamina=Math.min(MAX_STA,stamina+15*dt);
+  }
+  staminaFill.style.width=stamina+'%';
+  staminaFill.style.background=stamina<25?'linear-gradient(90deg,#f66,#c33)':'linear-gradient(90deg,#7f6,#3c6)';
+  if(moving){
+    const l=Math.hypot(mx,mz); mx/=l;mz/=l;
+    const sp=WALK_SPEED*(sprinting?SPRINT_MULT:1);
+    player.x+=mx*sp*dt; player.z+=mz*sp*dt;
+    bobT+=dt*(sprinting?14:10);
+  }
+  collide();
+}
+function updateCamera(){
+  const bob=moving?Math.sin(bobT)*(sprinting?0.08:0.04):0;
+  camera.position.set(player.x,player.y+1.6+bob,player.z);
+}
+function updateNear(){
+  nearGen=-1; let nd=1e9;
+  for(let i=0;i<gens.length;i++){
+    if(gens[i].maintained)continue;
+    const dx=player.x-gens[i].x,dz=player.z-gens[i].z,d=Math.sqrt(dx*dx+dz*dz);
+    if(d<nd){nd=d;nearGen=i;}
+  }
+  if(nearGen>=0&&nd>=10)nearGen=-1;
+}
+function maintainGen(i){
+  const g=gens[i];
+  g.maintained=true;
+  g.lampMat.color.setHex(0x22ff55);
+  g.light.color.setHex(0x22ff55);
+  playMaintainSound();
+}
+function triggerEnding(){
+  endingTriggered=true;
+  state='ending';
+  stopAllAudio();
+  if(document.pointerLockElement){try{document.exitPointerLock();}catch(err){}}
+  if(document.fullscreenElement){try{document.exitFullscreen();}catch(err){}}
+  mapOpen=false; mapOverlay.style.display='none';
+  hideMsg(); interactEl.style.display='none';
+  document.getElementById('ending').classList.add('show');
+}
+function updateHUD(dt){
+  if(nearGen>=0&&!gens[nearGen].maintained){
+    interactEl.style.display='flex';
+    interactLabel.textContent='按住 [E] 维护发电机';
+    if(keys['KeyE']){
+      progress+=dt/2.6;
+      if(progress>=1){ maintainGen(nearGen); progress=0; interactEl.style.display='none'; }
+    } else progress=0;
+    progressFill.style.width=Math.min(100,progress*100)+'%';
+  } else {
+    const cdx=player.x-COMPUTER_POS.x,cdz=player.z-COMPUTER_POS.z;
+    const cNear=cdx*cdx+cdz*cdz<18;
+    const ndx=player.x-NOTE_POS.x,ndz=player.z-NOTE_POS.z;
+    const nNear=ndx*ndx+ndz*ndz<9;
+    if(cNear){
+      interactEl.style.display='flex';
+      interactLabel.textContent='按 [E] 使用电脑';
+      progressFill.style.width='0%';
+      if(keys['KeyE']) openSpeed();
+    } else if(nNear){
+      interactEl.style.display='flex';
+      interactLabel.textContent='按 [E] 查看纸条';
+      progressFill.style.width='0%';
+      if(keys['KeyE']) openNote();
+    } else {
+      interactEl.style.display='none'; progress=0;
+    }
+  }
+  const dx=player.x-HOME_CIRCLE.x,dz=player.z-HOME_CIRCLE.z;
+  const inCircle=dx*dx+dz*dz<HOME_RADIUS*HOME_RADIUS;
+  if(inCircle){
+    const all=gens.every(function(g){return g.maintained;});
+    if(all&&!endingTriggered) triggerEnding();
+    else if(!all) showMsg('我得维护四台发电机',true);
+  } else hideMsg();
+}
+
+/* ============ day5 Morning 白色开场（点击直接开始，无淡出） ============ */
+const introEl=document.getElementById('intro');
+const clickHint=document.getElementById('click-hint');
+setTimeout(function(){ clickHint.style.display='block'; },800);
+
+function startGame(){
+  state='playing';
+  try{
+    daytimeAudio=new Audio('daytime.mp3');
+    daytimeAudio.loop=true; daytimeAudio.volume=0.3;
+    daytimeAudio.play().catch(function(){});
+  }catch(e){}
+  showHint('第五天 · 清晨：今天的任务是维护森林四角的四台发电机。\n按 Tab 查看地图，靠近发电机按住 E 进行维护。\n森林里多了一栋木屋，门没有上锁……收音机似乎坏掉了。');
+  hideHintSoon(9000);
+}
+
+document.addEventListener('click', function onIntroClick(){
+  if(state!=='intro') return;
+  document.removeEventListener('click', onIntroClick);
+  state='playing';
+  introEl.style.display='none';
+  try{ const p=document.documentElement.requestFullscreen(); if(p&&p.catch)p.catch(function(){}); }catch(err){}
+  try{ document.body.requestPointerLock(); }catch(err){}
+  initAudio();
+  startGame();
+});
+
+document.getElementById('resume-btn').addEventListener('click',function(){
+  try{ document.body.requestPointerLock(); }catch(err){}
+});
+document.getElementById('nextday-btn').addEventListener('click',function(){
+  window.location.href='index8.html';
+});
+
+/* ============ 主循环 ============ */
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  if(state==='playing'){
+    updatePlayer(dt);
+    updateCamera();
+    updateNear();
+    updateHUD(dt);
+  }
+  if(mapOpen) drawMap();
+  camera.rotation.y=yaw; camera.rotation.x=pitch;
+  renderer.render(scene,camera);
+}
+animate();
+})();
+</script>
+</body>
+</html>
